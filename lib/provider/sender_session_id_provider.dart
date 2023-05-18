@@ -1,11 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-final senderSessionIdProvider = StateNotifierProvider<SenderSessionID, String>((ref) {
-  return SenderSessionID();
+final senderSessionIdProvider = StateNotifierProvider<SenderSessionId, String>((ref) {
+  return SenderSessionId();
 });
 
-class SenderSessionID extends StateNotifier<String> {
-  SenderSessionID() : super("");
+class SenderSessionId extends StateNotifier<String> {
+  SenderSessionId() : super("");
   void setSessionId(String sessionId) {
     state = sessionId;
   }
