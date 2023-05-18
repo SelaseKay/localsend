@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:localsend_app/constants.dart';
 import 'package:localsend_app/model/dto/info_dto.dart';
@@ -13,11 +14,14 @@ import 'package:localsend_app/model/state/server/receive_session_state.dart';
 import 'package:localsend_app/model/state/server/receiving_file.dart';
 import 'package:localsend_app/model/state/server/server_state.dart';
 import 'package:localsend_app/model/session_status.dart';
+import 'package:localsend_app/pages/home_page.dart';
 import 'package:localsend_app/pages/progress_page.dart';
 import 'package:localsend_app/pages/receive_page.dart';
 import 'package:localsend_app/provider/device_info_provider.dart';
+import 'package:localsend_app/provider/dio_provider.dart';
 import 'package:localsend_app/provider/fingerprint_provider.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
+import 'package:localsend_app/provider/network/send_provider.dart';
 import 'package:localsend_app/provider/progress_provider.dart';
 import 'package:localsend_app/provider/receive_history_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
@@ -37,8 +41,11 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:uuid/uuid.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../sender_session_id_provider.dart';
+
 /// This provider manages receiving file requests.
-final serverProvider = StateNotifierProvider<ServerNotifier, ServerState?>((ref) {
+final serverProvider =
+    StateNotifierProvider<ServerNotifier, ServerState?>((ref) {
   final deviceInfo = ref.watch(deviceRawInfoProvider);
   return ServerNotifier(ref, deviceInfo);
 });
@@ -51,7 +58,8 @@ class ServerNotifier extends StateNotifier<ServerState?> {
 
   ServerNotifier(this._ref, this.deviceInfo) : super(null);
 
-  Future<ServerState?> startServer({required String alias, required int port, required bool https}) async {
+  Future<ServerState?> startServer(
+      {required String alias, required int port, required bool https}) async {
     if (state != null) {
       print('Server already running.');
       return null;
@@ -85,7 +93,8 @@ class ServerNotifier extends StateNotifier<ServerState?> {
         httpServer: await serve(router, '0.0.0.0', port,
             securityContext: SecurityContext()
               ..usePrivateKeyBytes(securityContextResult.privateKey.codeUnits)
-              ..useCertificateChainBytes(securityContextResult.certificate.codeUnits)),
+              ..useCertificateChainBytes(
+                  securityContextResult.certificate.codeUnits)),
         alias: alias,
         port: port,
         https: true,
@@ -147,7 +156,9 @@ class ServerNotifier extends StateNotifier<ServerState?> {
       }
 
       // Save device information
-      _ref.read(nearbyDevicesProvider.notifier).registerDevice(requestDto.toDevice(request.ip, port, https));
+      _ref
+          .read(nearbyDevicesProvider.notifier)
+          .registerDevice(requestDto.toDevice(request.ip, port, https));
 
       final responseDto = InfoDto(
         alias: alias,
@@ -174,11 +185,13 @@ class ServerNotifier extends StateNotifier<ServerState?> {
 
       if (dto.files.isEmpty) {
         // block empty requests (at least one file is required)
-        return _response(400, message: 'Request must contain at least one file');
+        return _response(400,
+            message: 'Request must contain at least one file');
       }
 
       final settings = _ref.read(settingsProvider);
-      final destinationDir = settings.destination ?? await getDefaultDestinationDirectory();
+      final destinationDir =
+          settings.destination ?? await getDefaultDestinationDirectory();
       final sessionId = _uuid.v4();
 
       print('Session Id: $sessionId');
@@ -218,7 +231,9 @@ class ServerNotifier extends StateNotifier<ServerState?> {
         };
       } else {
         if (checkPlatformHasTray() &&
-            (await windowManager.isMinimized() || !(await windowManager.isVisible()) || !(await windowManager.isFocused()))) {
+            (await windowManager.isMinimized() ||
+                !(await windowManager.isVisible()) ||
+                !(await windowManager.isFocused()))) {
           await showFromTray();
         }
 
@@ -252,7 +267,9 @@ class ServerNotifier extends StateNotifier<ServerState?> {
                   entry.file.id,
                   ReceivingFile(
                     file: entry.file,
-                    status: desiredName != null ? FileStatus.queue : FileStatus.skipped,
+                    status: desiredName != null
+                        ? FileStatus.queue
+                        : FileStatus.skipped,
                     token: desiredName != null ? _uuid.v4() : null,
                     desiredName: desiredName,
                     path: null,
@@ -276,7 +293,9 @@ class ServerNotifier extends StateNotifier<ServerState?> {
         }
 
         return _response(200, body: {
-          for (final file in state!.session!.files.values.where((f) => f.token != null)) file.file.id: file.token,
+          for (final file
+              in state!.session!.files.values.where((f) => f.token != null))
+            file.file.id: file.token,
         });
       } else {
         closeSession();
@@ -291,12 +310,14 @@ class ServerNotifier extends StateNotifier<ServerState?> {
       }
 
       if (request.ip != receiveState.sender.ip) {
-        print('Invalid ip address: ${request.ip} (expected: ${receiveState.sender.ip})');
+        print(
+            'Invalid ip address: ${request.ip} (expected: ${receiveState.sender.ip})');
         return _response(403, message: 'Invalid IP address: ${request.ip}');
       }
 
       if (receiveState.status != SessionStatus.sending) {
-        print('Wrong state: ${receiveState.status} (expected: ${SessionStatus.sending})');
+        print(
+            'Wrong state: ${receiveState.status} (expected: ${SessionStatus.sending})');
         return _response(409, message: 'Recipient is in wrong state');
       }
 
@@ -322,10 +343,12 @@ class ServerNotifier extends StateNotifier<ServerState?> {
               fileId,
               (_) => receivingFile.copyWith(
                 status: FileStatus.sending,
-                token: null, // remove token to reject further uploads of the same file
+                token:
+                    null, // remove token to reject further uploads of the same file
               ),
             ),
-          startTime: receiveState.startTime ?? DateTime.now().millisecondsSinceEpoch,
+          startTime:
+              receiveState.startTime ?? DateTime.now().millisecondsSinceEpoch,
         ),
       );
 
@@ -339,7 +362,8 @@ class ServerNotifier extends StateNotifier<ServerState?> {
       try {
         final saveToGallery = checkPlatformWithGallery() &&
             _ref.read(settingsProvider).saveToGallery &&
-            (receivingFile.file.fileType == FileType.image || receivingFile.file.fileType == FileType.video);
+            (receivingFile.file.fileType == FileType.image ||
+                receivingFile.file.fileType == FileType.video);
         await saveFile(
           destinationPath: destinationPath,
           name: receivingFile.desiredName!,
@@ -355,7 +379,8 @@ class ServerNotifier extends StateNotifier<ServerState?> {
             }
           },
         );
-        if (state?.session == null || state!.session!.status != SessionStatus.sending) {
+        if (state?.session == null ||
+            state!.session!.status != SessionStatus.sending) {
           return _response(500, message: 'Server is in invalid state');
         }
         state = state?.copyWith(
@@ -401,16 +426,22 @@ class ServerNotifier extends StateNotifier<ServerState?> {
             progress: 1,
           );
 
-      if (state!.session!.files.values
-          .every((f) => f.status == FileStatus.finished || f.status == FileStatus.skipped || f.status == FileStatus.failed)) {
-        final hasError = state!.session!.files.values.any((f) => f.status == FileStatus.failed);
+      if (state!.session!.files.values.every((f) =>
+          f.status == FileStatus.finished ||
+          f.status == FileStatus.skipped ||
+          f.status == FileStatus.failed)) {
+        final hasError = state!.session!.files.values
+            .any((f) => f.status == FileStatus.failed);
         state = state?.copyWith(
           session: state!.session!.copyWith(
-            status: hasError ? SessionStatus.finishedWithErrors : SessionStatus.finished,
+            status: hasError
+                ? SessionStatus.finishedWithErrors
+                : SessionStatus.finished,
             endTime: DateTime.now().millisecondsSinceEpoch,
           ),
         );
-        if (_ref.read(settingsProvider).quickSave && state?.session?.message == null) {
+        if (_ref.read(settingsProvider).quickSave &&
+            state?.session?.message == null) {
           // close the session after return of the response
           Future.delayed(Duration.zero, () {
             closeSession();
@@ -421,14 +452,18 @@ class ServerNotifier extends StateNotifier<ServerState?> {
         print('Received all files.');
       }
 
-      return state?.session?.files[fileId]?.status == FileStatus.finished ? _response(200) : _response(500, message: 'Could not save file');
+      return state?.session?.files[fileId]?.status == FileStatus.finished
+          ? _response(200)
+          : _response(500, message: 'Could not save file');
     });
 
-    router.post(ApiRoute.cancel.path, (Request request) {
+    router.post(ApiRoute.cancel.path, (Request request) async {
       if (state?.session?.sender.ip == request.ip) {
         _cancelBySender();
+      } else {
+        final sessionId = _ref.read(senderSessionIdProvider.notifier).state;
+        _cancelByReceiver(sessionId);
       }
-
       return _response(200);
     });
 
@@ -452,7 +487,8 @@ class ServerNotifier extends StateNotifier<ServerState?> {
     print('Server stopped.');
   }
 
-  Future<ServerState?> restartServer({required String alias, required int port, required bool https}) async {
+  Future<ServerState?> restartServer(
+      {required String alias, required int port, required bool https}) async {
     await stopServer();
     return await startServer(alias: alias, port: port, https: https);
   }
@@ -488,11 +524,33 @@ class ServerNotifier extends StateNotifier<ServerState?> {
 
   void _cancelBySender() {
     final currentStatus = state?.session?.status;
-    if (currentStatus != null && (currentStatus == SessionStatus.waiting || currentStatus == SessionStatus.sending)) {
-      Routerino.context.popUntil(ReceivePage); // pop just in case if use is in [ReceiveOptionsPage]
+    if (currentStatus != null &&
+        (currentStatus == SessionStatus.waiting ||
+            currentStatus == SessionStatus.sending)) {
+      Routerino.context.popUntil(
+          ReceivePage); // pop just in case if use is in [ReceiveOptionsPage]
       state = state?.copyWith(
         session: state?.session?.copyWith(
           status: SessionStatus.canceledBySender,
+        ),
+      );
+    }
+  }
+
+  void _cancelByReceiver(String sessionId) {
+    final sendState = _ref.read(sendProvider)[sessionId];
+    final currentStatus = sendState?.status;
+    if (currentStatus != null &&
+        (currentStatus == SessionStatus.waiting ||
+            currentStatus == SessionStatus.sending)) {
+      _ref
+          .read(sendProvider.notifier)
+          .cancelSession(sessionId, shouldNotifyReceiver: false);
+      Routerino.context.popUntil(
+          HomePage); // pop just in case if use is in [ReceiveOptionsPage]
+      state = state?.copyWith(
+        session: state?.session?.copyWith(
+          status: SessionStatus.canceledByReceiver,
         ),
       );
     }
@@ -505,8 +563,18 @@ class ServerNotifier extends StateNotifier<ServerState?> {
       // the server is not running
       return;
     }
-    closeSession();
 
+    final target = tempState.session?.sender;
+
+    //notify sender
+    _ref
+        .read(dioProvider(DioType.discovery))
+        .post(ApiRoute.cancel.target(target!))
+        .then((_) {})
+        .catchError((e) {
+      print(e);
+    });
+    closeSession();
     // TODO: cancel incoming requests (https://github.com/dart-lang/shelf/issues/319)
     // restartServer(alias: tempState.alias, port: tempState.port);
   }
@@ -534,16 +602,20 @@ Response _response(int code, {String? message, Map<String, dynamic>? body}) {
 
 extension on Request {
   String get ip {
-    return (context['shelf.io.connection_info'] as HttpConnectionInfo).remoteAddress.address;
+    return (context['shelf.io.connection_info'] as HttpConnectionInfo)
+        .remoteAddress
+        .address;
   }
 }
 
 /// If there is a file with the same name, then it appends a number to its file name
-Future<String> _digestFilePath({required String dir, required String fileName}) async {
+Future<String> _digestFilePath(
+    {required String dir, required String fileName}) async {
   String destinationPath;
   int counter = 1;
   do {
-    destinationPath = counter == 1 ? '$dir/$fileName' : '$dir/${fileName.withCount(counter)}';
+    destinationPath =
+        counter == 1 ? '$dir/$fileName' : '$dir/${fileName.withCount(counter)}';
     counter++;
   } while (await File(destinationPath).exists());
   return destinationPath;

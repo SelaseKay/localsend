@@ -22,6 +22,8 @@ import 'package:localsend_app/widget/file_thumbnail.dart';
 import 'package:routerino/routerino.dart';
 import 'package:wakelock/wakelock.dart';
 
+import '../provider/sender_session_id_provider.dart';
+
 class ProgressPage extends ConsumerStatefulWidget {
   final bool showAppBar;
   final bool closeSessionOnClose;
@@ -63,6 +65,7 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
           _filesWithToken = receiveSession.files.values.where((f) => f.token != null).map((f) => f.file.id).toSet();
         } else {
           final sendSession = ref.read(sendProvider)[widget.sessionId];
+          ref.read(senderSessionIdProvider.notifier).setSessionId(widget.sessionId);
           if (sendSession != null) {
             _files = sendSession.files.values.map((f) => f.file).toList();
             _filesWithToken = sendSession.files.values.where((f) => f.token != null).map((f) => f.file.id).toSet();
@@ -101,7 +104,6 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
     if (result) {
       final receiveSession = ref.read(serverProvider.select((s) => s?.session));
       final sendState = ref.read(sendProvider)[widget.sessionId];
-
       if (receiveSession != null) {
         ref.read(serverProvider.notifier).cancelSession();
       } else if (sendState != null) {
