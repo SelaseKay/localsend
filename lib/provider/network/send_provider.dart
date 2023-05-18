@@ -30,7 +30,9 @@ const _uuid = Uuid();
 
 /// The provider for **sending** files.
 /// The opposite of [serverProvider].
-final sendProvider = StateNotifierProvider<SendNotifier, Map<String, SendSessionState>>((ref) {
+final sendProvider =
+    StateNotifierProvider<SendNotifier, Map<String, SendSessionState>>((ref) {
+  print("Send provider has been intialized........");
   return SendNotifier(ref);
 });
 
@@ -52,6 +54,8 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
     final cancelToken = CancelToken();
     final sessionId = _uuid.v4();
 
+    print("Start session with session id: $sessionId");
+
     final requestState = SendSessionState(
       sessionId: sessionId,
       background: background,
@@ -67,8 +71,11 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
               fileName: file.name,
               size: file.size,
               fileType: file.fileType,
-              preview: files.length == 1 && files.first.fileType == FileType.text && files.first.bytes != null
-                  ? utf8.decode(files.first.bytes!) // send simple message by embedding it into the preview
+              preview: files.length == 1 &&
+                      files.first.fileType == FileType.text &&
+                      files.first.bytes != null
+                  ? utf8.decode(files.first
+                      .bytes!) // send simple message by embedding it into the preview
                   : null,
             ),
             status: FileStatus.queue,
@@ -106,7 +113,8 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
     if (!background) {
       // ignore: use_build_context_synchronously
       Routerino.context.push(
-        () => SendPage(showAppBar: false, closeSessionOnClose: true, sessionId: sessionId),
+        () => SendPage(
+            showAppBar: false, closeSessionOnClose: true, sessionId: sessionId),
         transition: RouterinoTransition.fade,
       );
     }
@@ -151,7 +159,8 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
 
       if (state[sessionId]?.background == false) {
         // ignore: use_build_context_synchronously
-        Routerino.context.pushRootImmediately(() => const HomePage(initialTab: HomeTab.send, appStart: false));
+        Routerino.context.pushRootImmediately(
+            () => const HomePage(initialTab: HomeTab.send, appStart: false));
       }
 
       state = state.removeSession(_ref, sessionId);
@@ -160,17 +169,20 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
 
     final sendingFiles = {
       for (final file in requestState.files.values)
-        file.file.id:
-            responseMap.containsKey(file.file.id) ? file.copyWith(token: responseMap[file.file.id]) : file.copyWith(status: FileStatus.skipped),
+        file.file.id: responseMap.containsKey(file.file.id)
+            ? file.copyWith(token: responseMap[file.file.id])
+            : file.copyWith(status: FileStatus.skipped),
     };
 
     if (state[sessionId]?.background == false) {
-      final background = _ref.read(settingsProvider.select((s) => s.sendMode == SendMode.multiple));
+      final background = _ref.read(
+          settingsProvider.select((s) => s.sendMode == SendMode.multiple));
 
       // ignore: use_build_context_synchronously
       Routerino.context.pushAndRemoveUntil(
         removeUntil: HomePage,
-        transition: RouterinoTransition.fade, // immediately is not possible: https://github.com/flutter/flutter/issues/121910
+        transition: RouterinoTransition
+            .fade, // immediately is not possible: https://github.com/flutter/flutter/issues/121910
         builder: () => ProgressPage(
           showAppBar: background,
           closeSessionOnClose: !background,
@@ -190,12 +202,14 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
     await _send(sessionId, uploadDio, target, sendingFiles);
   }
 
-  Future<void> _send(String sessionId, Dio dio, Device target, Map<String, SendingFile> files) async {
+  Future<void> _send(String sessionId, Dio dio, Device target,
+      Map<String, SendingFile> files) async {
     bool hasError = false;
 
     state = state.updateSession(
       sessionId: sessionId,
-      state: (s) => s?.copyWith(startTime: DateTime.now().millisecondsSinceEpoch),
+      state: (s) =>
+          s?.copyWith(startTime: DateTime.now().millisecondsSinceEpoch),
     );
 
     for (final file in files.values) {
@@ -227,7 +241,9 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
               'Content-Length': file.file.size,
             },
           ),
-          data: file.path != null ? File(file.path!).openRead() : Stream.fromIterable([file.bytes!]),
+          data: file.path != null
+              ? File(file.path!).openRead()
+              : Stream.fromIterable([file.bytes!]),
           onSendProgress: (curr, total) {
             _ref.read(progressProvider.notifier).setProgress(
                   sessionId: sessionId,
@@ -246,7 +262,10 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
 
       state = state.updateSession(
         sessionId: sessionId,
-        state: (s) => s?.withFileStatus(file.file.id, fileError != null ? FileStatus.failed : FileStatus.finished, fileError),
+        state: (s) => s?.withFileStatus(
+            file.file.id,
+            fileError != null ? FileStatus.failed : FileStatus.finished,
+            fileError),
       );
     }
 
@@ -256,7 +275,9 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
       state = state.updateSession(
         sessionId: sessionId,
         state: (s) => s?.copyWith(
-          status: hasError ? SessionStatus.finishedWithErrors : SessionStatus.finished,
+          status: hasError
+              ? SessionStatus.finishedWithErrors
+              : SessionStatus.finished,
           endTime: DateTime.now().millisecondsSinceEpoch,
         ),
       );
@@ -266,7 +287,7 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
   }
 
   /// Closes the send-session and sends a cancel event to the receiver.
-  void cancelSession(String sessionId) {
+  void cancelSession(String sessionId, {bool shouldNotifyReceiver = true}) {
     final sessionState = state[sessionId];
     if (sessionState == null) {
       return;
@@ -274,15 +295,23 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
     final target = sessionState.target;
     sessionState.cancelToken?.cancel(); // cancel current request
     state = state.removeSession(_ref, sessionId);
-    if (sessionState.status == SessionStatus.finished && _ref.read(settingsProvider.select((s) => s.sendMode == SendMode.single))) {
+    if (sessionState.status == SessionStatus.finished &&
+        _ref.read(
+            settingsProvider.select((s) => s.sendMode == SendMode.single))) {
       // clear selected files
       _ref.read(selectedSendingFilesProvider.notifier).reset();
     }
 
     // notify the receiver
-    _ref.read(dioProvider(DioType.discovery)).post(ApiRoute.cancel.target(target)).then((_) {}).catchError((e) {
-      print(e);
-    });
+    if (shouldNotifyReceiver) {
+      _ref
+          .read(dioProvider(DioType.discovery))
+          .post(ApiRoute.cancel.target(target))
+          .then((_) {})
+          .catchError((e) {
+        print(e);
+      });
+    }
   }
 
   void clearAllSessions() {
@@ -291,7 +320,9 @@ class SendNotifier extends StateNotifier<Map<String, SendSessionState>> {
   }
 
   void setBackground(String sessionId, bool background) {
-    state = state.updateSession(sessionId: sessionId, state: (s) => s?.copyWith(background: background));
+    state = state.updateSession(
+        sessionId: sessionId,
+        state: (s) => s?.copyWith(background: background));
   }
 }
 
@@ -318,7 +349,8 @@ extension on Map<String, SendSessionState> {
 }
 
 extension on SendSessionState {
-  SendSessionState withFileStatus(String fileId, FileStatus status, String? errorMessage) {
+  SendSessionState withFileStatus(
+      String fileId, FileStatus status, String? errorMessage) {
     return copyWith(
       files: {...files}..update(
           fileId,
